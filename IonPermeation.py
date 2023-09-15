@@ -92,23 +92,35 @@ def pore_center(in_sel, out_sel):
 
     return v3
 
-def in_cylinder(atomgroup, out_sel, cutoff=5.0):
-    rcp = np.array([out_sel.center_of_mass()[0], out_sel.center_of_mass()[1]])
-    for atom in atomgroup:
-        r = np.array([atom.position[0], atom.position[1]])
-        dist = np.linalg.norm(rcp-r)
-        if dist <= cutoff:
-            print(atom.index, atom.position[2])
+def in_cylinder(atomgroup, zmax=10, zmin=-10, cutoff=5.0):
+    com = "protein and resid 690"
+    cyzone = u.select_atoms(f"cyzone {cutoff} {zmax} {zmin} ({com})")
+    print(cyzone.atoms)
+    # in_cyl = []
+    # rcp = np.array([out_sel.center_of_mass()[0], out_sel.center_of_mass()[1]])
+    # for atom in atomgroup:
+    #     r = np.array([atom.position[0], atom.position[1]])
+    #     dist = np.linalg.norm(rcp-r)
+    #     if dist <= cutoff:
+    #         in_cyl.append((atom.index, atom.position[2]))
+    # print(in_cyl)
 
+# def in_channel(atomgroup, in_sel, out_sel):
+#     in_chan = []
 
 class IonPermeation(AnalysisBase):
-    def __init__(self, atomgroup, in_sel, out_sel, verbose=True):
+    def __init__(self, atomgroup, in_sel, out_sel, zmin, zmax, com, cutoff, verbose=True):
         super(IonPermeation, self).__init__(atomgroup.universe.trajectory, verbose=verbose)
         # self.u = universe
         # self._trajectory = self.u.trajectory
         self.atomgroup = atomgroup
         self.in_sel = in_sel
         self.out_sel = out_sel
+        self.zmin = zmin
+        self.zmax = zmax
+        self.com = com
+        self.cutoff = cutoff
+
         # self.results = Results()
         # self._trajectory = self.u.trajectory
         # self._parameter = cutoff
@@ -118,6 +130,7 @@ class IonPermeation(AnalysisBase):
 
     def _prepare(self):
         self.results = np.zeros((self.atomgroup.universe.trajectory.n_frames, len(self.atomgroup)+1), dtype=np.float32)
+        self.channel = []
         # print(self.results)
 
     # def __init__(self, universe,
@@ -161,30 +174,35 @@ class IonPermeation(AnalysisBase):
         # call our earlier function
         
         # z_pos = ion_positions(self)
-        res = ion_positions(self.atomgroup)
+        # res = ion_positions(self.atomgroup)
         # axis = pore_axis(self.in_sel, self.out_sel)
-        pore_ions = in_cylinder(self.atomgroup, self.out_sel)
-        # print(pore_ions)
+        pore_ions = in_cylinder(self.atomgroup, self.zmax, self.zmin, self.com, self.cutoff)
+        print(pore_ions)
+        for atom in pore_ions:
+            if atom.index in self.channel:
+                print(atom.index, True)
+            els:
+            print(atom.index, False)
         # save it into self.results
-        self.results[self._frame_index, 1:] = res
-        # the current timestep of the trajectory is self._ts
-        self.results[self._frame_index, 0] = self._ts.frame
+        # self.results[self._frame_index, 1:] = res
+        # # the current timestep of the trajectory is self._ts
+        # self.results[self._frame_index, 0] = self._ts.frame
         # the actual trajectory is at self._trajectory
         # self.results[self._frame_index, 1] = self._trajectory.time
 
 
 
 
-    def _conclude(self):
-        """
-        Finish up by transforming our
-        results into a DataFrame.
-        """
-        # by now self.result is fully populated
-        # self.average = np.mean(self.results[:, 1], axis=0)
-        # columns = ['Frame', 'Ion Position']
-        self.df = pd.DataFrame(self.results)
-        print(self.df)
+    # def _conclude(self):
+    #     """
+    #     Finish up by transforming our
+    #     results into a DataFrame.
+    #     """
+    #     # by now self.result is fully populated
+    #     # self.average = np.mean(self.results[:, 1], axis=0)
+    #     # columns = ['Frame', 'Ion Position']
+    #     self.df = pd.DataFrame(self.results)
+    #     print(self.df)
 
     def plot(self):
 
@@ -250,12 +268,23 @@ class IonPermeation(AnalysisBase):
 #     #     self.results.events = np.asarray(self.results.events).T
 # ###############################################################################
 
-path = "/biggin/b134/bioc1550/Documents/WORK/GITHUB/IONPERMEATION"
+path = "/Users/afroditimariazaki/Documents/GITHUB/IonPermeation"
 
 u = mda.Universe(f"{path}/test.pdb", f"{path}/test.xtc")
 ion = u.select_atoms("resname SOD")
 in_sel = u.select_atoms("protein and resid 652 653 654 and name CA")
 out_sel = u.select_atoms("protein and resid 690 694 and name CA")
+# com = "protein and resid 690"
 
+# cylayer innerRadius externalRadius zMax zMin selection
+# cutoff = 5
+# zmin = -10
+# zmax= 10
 
-ip = IonPermeation(ion, in_sel, out_sel, verbose=True).run()
+# cyzone = u.select_atoms(f"cyzone {cutoff} {zmax} {zmin} (protein and resid 690 694 and name CA)")
+# print(cyzone.atoms)
+
+# for atom in cyzone:
+#     print(atom.index)
+# ip = IonPermeation(ion, in_sel, out_sel, -10, 10, com, 5, verbose=True).run()
+in_cylinder(u)
