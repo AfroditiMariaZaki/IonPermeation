@@ -1,55 +1,81 @@
 """
+Ion Permeation Analysis
 =======================================================
 
 :Author: Afroditi Maria Zaki
 :Affiliation: SBCB, University Of Oxford
 :Year: 2023
 
-This module computes the number of ion permeation events through an ion channel in a Universe.
+This module contains the :class:'IonPermeation' that analyses the ion permeation through an ion channel in a Universe. The functions in this module are:
+ion permeation (IP)
+ToDo:
+conductance (C) and passing time (PT).
 
 Input
 -----
 
 Required:
-    - *Universe*: an MDAnalysis object
+    - *universe*: an MDAnalysis Universe object
+    - *atomgroup*: group of ions that permeate the ion channel
+    - *in_sel*: selection of atome/residues that form the entrance of the ion channel
+    - *out_sel*: selection of atome/residues that form the exit of the ion channel
 
-    Options:
-    # ToDo
+Options:
+
 
 Output
 ------
-
-    - *frame*: Frame at which an ion permeation event occured
-    - *ion ID*: atom ID of the ion that crossed the channel
-    - *count*: Total number of ion permeation events
+    df : A pandas DataFrame with two columns:
+        - *frame*: Every frame of the trajectory
+        - *events*: Cumulative number of permeation events at every frame
 =======================================================
 
 How it works
 ------------
     -For every frame:
-        * The position of ions across the membrane plane is read and if found to be within the cylinder defined by the pore axis and a cutoff radius,
-        it is stored in a list (cylinder_ions).
-        * The position of the ions in the previous list across the pore axis is read and if found to be between the upper and lower barriers set by
-        the selectivity filter and the gate residues, the ion is considered to be in the channel and is stored in a list (channel_ions).
-        * The current z-coordinates of the atoms in the existing (before updating) channel_ions list is compared to heir z-coordinates 
-        from the previous step and if lower than selecivity filter barrier, the count of the crossing events goes up by 1. 
+        * The position of every ion across the membrane plane is read and if found to be within the cylinder defined by the pore axis and a cutoff radius
+        and between the limits set by the residues that form the entry and exit points of the ion channel, it is stored in an AtomGroup (cyzone).
+        * The position of every ion in the cyzone AtomGroup across the pore axis that was computed in the previous frame is read and if found to be lower than the exit point,
+        the ion is considered to have permeated through the ion channel and the events counter increases by +1.
 
+        
 Example use of :class: 'IonPermeation'        
 --------------------------------------
 
 import MDAnalysis as mda
-import IonPermeation as ip
 
 u = mda.Universe(grofile, trjfile)
 
-PermeationEvents = ip(
+IP = IonPermeation(
     universe=u, 
-    ion_sel='SOD', 
-    in_sel='resid 123', 
-    out_sel='resid 456', 
-    cutoff = 5.0)
+    atomgroup='resname SOD', 
+    in_sel='protein and resid 271 272 652 653 654 and name CA', 
+    out_sel='protein and resid 308 312 690 694 and name CA')
 
-PermeationEvents.run()
+
+To compute ion permeation events::
+
+IP.run()
+
+To save data in a .csv file::
+
+IP.save()
+
+To plot data::
+
+IP.plot()
+
+
+Classes
+-------
+
+.. autoclass:: IonPermeation
+
+
+Functions
+---------
+
+.. autofunction:: in_channel_ions
 
 """
 
@@ -66,225 +92,183 @@ from MDAnalysis.analysis.base import AnalysisBase
 from MDAnalysis.analysis.base import Results
 
 
-def ion_positions(ag):
-    # ag = self.atomgroup
-    # print(ag.atoms.resids)
-    z_pos = ag.atoms.positions[:,2]
-    # sq_z_pos = z_pos
-    return z_pos
 
-def channel_limits(in_sel, out_sel):
+# def in_channel_ions(atomgroup, channel_upper, channel_lower, channel_com, zmin=0, cutoff=5.0):
+#     """
+#     Selects all ions that are found in the ion conduction pore
+#     """
+
+#     upper_sel = u.select_atoms(channel_upper)
+#     lower_sel = u.select_atoms(channel_lower)
+#     zmax = upper_sel.center_of_geometry()[2]-lower_sel.center_of_geometry()[2]
+#     cyzone = u.select_atoms(f"{atomgroup} and cyzone {cutoff} {zmax} {zmin} {channel_com}")
+
+#     return cyzone
+
+def in_channel_ions(atomgroup, in_sel, out_sel, channel_com, zmin=0, cutoff=5.0):
     """
-    Define entry and exit point of ion channel
+    Creates an atomgroup with all the ions that are found in the ion conduction pore
+
+    Parameters
+    ----------
+    atomgroup : str
+        Selection string for the permeating ions
+    in_sel : str
+        Selection string for the residues or atoms that define the channel entry point
+    out_sel : str
+        Selection string for the residues or atoms that define the channel exit point
+    channel_com : str
+        Selection string for the atoms that form the lowest end of the ion conduction pore.
+        Any permeating ion found to have crossed this point will be considered to have permeated
+        through the channel and will increase the count of the permeation events by one.
+    zmin : float, optional
+        The minimum point along the z-axis of the ion channel and the cylinder that encloses the permeating ion. 
+        If the channel_com contains the atoms of the exit point of the ion channel, thn zmin should be equal to zero.
+    cutoff : float, optional
+        Define the radius of the cylinder that encloses the ion permeation channel
+
+    Returns
+    -------
+    cyzone : AtomGroup 
+        Atomgroup that contains all the ions that are found in the ion conduction pore.
+        This function is called at every frame, to update the selection of the permeating ions.
+
+    Note
+    ----
+    The code assumes that the ion conduction pore is parallel to the z-axis. 
+    It is also written for monoatomic ions. If your system contains polyatomic ions, please make sure to select only one atom type in your atomgroup selection.
     """
-    z_in = in_sel.center_of_mass()[2]
-    z_out = out_sel.center_of_mass()[2]
 
-    return z_in, z_out
+    in_channel = u.select_atoms(in_sel)
+    out_channel = u.select_atoms(out_sel)
+    zmax = in_channel.center_of_geometry()[2]-out_channel.center_of_geometry()[2]
+    cyzone = u.select_atoms(f"{atomgroup} and cyzone {cutoff} {zmax} {zmin} {channel_com}")
 
-def pore_center(in_sel, out_sel):
-    """
-    Define center of pore axis
-    """
-    v1 = in_sel.center_of_mass()
-    v2 = out_sel.center_of_mass()
-    v3 = v2 - v1
+    return cyzone
 
-    return v3
-
-def in_cylinder(atomgroup, zmax=10, zmin=-10, cutoff=5.0):
-    com = "protein and resid 690"
-    cyzone = u.select_atoms(f"cyzone {cutoff} {zmax} {zmin} ({com})")
-    print(cyzone.atoms)
-    # in_cyl = []
-    # rcp = np.array([out_sel.center_of_mass()[0], out_sel.center_of_mass()[1]])
-    # for atom in atomgroup:
-    #     r = np.array([atom.position[0], atom.position[1]])
-    #     dist = np.linalg.norm(rcp-r)
-    #     if dist <= cutoff:
-    #         in_cyl.append((atom.index, atom.position[2]))
-    # print(in_cyl)
-
-# def in_channel(atomgroup, in_sel, out_sel):
-#     in_chan = []
 
 class IonPermeation(AnalysisBase):
-    def __init__(self, atomgroup, in_sel, out_sel, zmin, zmax, com, cutoff, verbose=True):
-        super(IonPermeation, self).__init__(atomgroup.universe.trajectory, verbose=verbose)
-        # self.u = universe
-        # self._trajectory = self.u.trajectory
-        self.atomgroup = atomgroup
-        self.in_sel = in_sel
-        self.out_sel = out_sel
-        self.zmin = zmin
-        self.zmax = zmax
-        self.com = com
-        self.cutoff = cutoff
+    """
+    Compute the cumulative number of ion permeation events on a given trajectory
 
-        # self.results = Results()
-        # self._trajectory = self.u.trajectory
-        # self._parameter = cutoff
-        # self._ag = ion_sel
-        # self.results = np.zeros((self._trajectory.n_frames, 2), dtype=np.float32)
+    Parameters
+    ----------
+    universe : Universe
+        MDAnalysis universe object
+    atomgroup : str
+        Selection string for the permeating ions
+    in_sel : str
+        Selection string for the residues or atoms that define the channel entry point
+    out_sel : 
+        Selection string for the residues or atoms that define the channel exit point
+    verbose : bool, optional
+        Turn on more logging and debugging.
+
+    """
+
+    def __init__(self, universe, atomgroup, in_sel, out_sel, verbose=True):
+        self.u = universe
+        self._trajectory = self.u.trajectory
+        self.atomgroup = atomgroup
+        self.in_sel = self.u.select_atoms(in_sel)
+        self.out_sel = self.u.select_atoms(out_sel)
 
 
     def _prepare(self):
-        self.results = np.zeros((self.atomgroup.universe.trajectory.n_frames, len(self.atomgroup)+1), dtype=np.float32)
-        self.channel = []
-        # print(self.results)
+        """
+        Prepare array to store data and initialize variables
+        """
+        self.cyl_zone = in_channel_ions(ions, in_sel, out_sel, channel_com)
+        self.results = np.zeros((self._trajectory.n_frames, 2), dtype=np.float32)
+        print(self.results.shape)
+        self.events = 0
+        self.ion_id = 0
 
-    # def __init__(self, universe,
-    #              ion_sel=None,
-    #              in_sel=None,
-    #              out_sel=None,
-    #              cutoff=5.0):
-    #     super(IonPermeation, self).__init__(ion_sel.universe.trajectory)
-    #     self.u = universe
-    #     self._trajectory = self.u.trajectory
-    #     self.ion_sel = ion_sel.strip()
-    #     self.in_sel = in_sel.strip()
-    #     self.out_sel = out_sel.strip()
-    #     self.cutoff = cutoff
-        # self.results = Results()
-
-    # def ion_positions(self):
-    #     ions = self.atomgroup
-    #     print(ions.residues)
-    #     print(ions.atoms.positions[:,2])
-        # print(np.array([ions.position[:,0]]))
-
-
-
-    # def _single_frame(self):
-    #     # frame = self._ts.frame
-    #     ion_pos = ion_positions(self)
-    #     # i = self._trajectory.ts.frame
-    #     # self.results[i] = i**2
-    #     # print("Single frame: ", self.results[i])
-    #     # save it into self.results
-    #     self.results[self._frame_index, 1] = ion_pos
-    #     # the current timestep of the trajectory is self._ts
-    #     self.results[self._frame_index, 0] = self._ts.frame
 
     def _single_frame(self):
         """
-        This function is called for every frame that we choose
-        in run().
+        This function is called for every frame of the trajectory
         """
-        # call our earlier function
-        
-        # z_pos = ion_positions(self)
-        # res = ion_positions(self.atomgroup)
-        # axis = pore_axis(self.in_sel, self.out_sel)
-        pore_ions = in_cylinder(self.atomgroup, self.zmax, self.zmin, self.com, self.cutoff)
-        print(pore_ions)
-        for atom in pore_ions:
-            if atom.index in self.channel:
-                print(atom.index, True)
-            els:
-            print(atom.index, False)
-        # save it into self.results
-        # self.results[self._frame_index, 1:] = res
-        # # the current timestep of the trajectory is self._ts
-        # self.results[self._frame_index, 0] = self._ts.frame
-        # the actual trajectory is at self._trajectory
-        # self.results[self._frame_index, 1] = self._trajectory.time
+        exit_point = np.min(self.out_sel.positions[:,2])
+        if len(self.cyl_zone) == 0:
+            self.results[self._frame_index, 0] = self._ts.frame
+            self.results[self._frame_index, 1] = self.events
+        else:
+            for atom in self.cyl_zone:
+                if atom.position[2]<exit_point and atom.index == self.ion_id:
+                    # Event has already been counted
+                    self.results[self._frame_index, 0] = self._ts.frame
+                    self.results[self._frame_index, 1] = self.events
+                elif atom.position[2]<exit_point and atom.index != self.ion_id: 
+                    self.events+=1
+                    self.results[self._frame_index, 0] = self._ts.frame
+                    self.results[self._frame_index, 1] = self.events
+                    self.ion_id = atom.index
+                else:
+                    self.results[self._frame_index, 0] = self._ts.frame
+                    self.results[self._frame_index, 1] = self.events
+        self.cyl_zone = in_channel_ions(ions, in_sel, out_sel, channel_com)
+
+        print(self._ts.frame, self.events)
 
 
+    def _conclude(self):
+        """
+        Finish up by transforming the
+        results into a DataFrame.
+        """
+        self.df = pd.DataFrame(self.results)
 
-
-    # def _conclude(self):
-    #     """
-    #     Finish up by transforming our
-    #     results into a DataFrame.
-    #     """
-    #     # by now self.result is fully populated
-    #     # self.average = np.mean(self.results[:, 1], axis=0)
-    #     # columns = ['Frame', 'Ion Position']
-    #     self.df = pd.DataFrame(self.results)
-    #     print(self.df)
 
     def plot(self):
-
+        """
+        Visualize the results
+        """
         fig, ax = plt.subplots()
-        ax.plot(self.results[:,0], self.results[:,2], color='red', label="z-position")
-        ax.set_xlabel("x axis")
-        ax.set_ylabel("y axis")
+        ax.plot(self.results[:,0], self.results[:,1], color='red', label="Permeation events")
+        ax.set_xlabel("Frame")
+        ax.set_ylabel("Cumulative permeation events")
         ax.legend(loc=2)
         plt.show()
 
 
-    #     # self.results[self._frame_index, :] = self._trajectory.ts.frame
-    #     # print(self.results[self._frame_index, :])
-    #     print(self._frame_index)
-
-#     def  _conclude(self):
-#         self.results = np.asarray(self.results)
-        #  self.results /= np.sum(self.results)
-
-#     def plot(self, ax=None):
-#         """Visualize the results
+    def save(self, path=None, filename='permeation_events'):
+        """
+        Saves data in .csv file
         
-#         Parameters
-#         ----------
-#         ax : matplotlib.Axes, optional
-#           if provided, the graph is plotted on this axis
 
-#         Returns
-#         -------
-#         ax: the axis that the graph has been plotted on
-#         """
-#         import matplotlib as plt
-#         if ax is None:
-#             fig, ax = plt.subplots()
-#         ax.plot(self.results
-#                 'ro',
-#                 label='Permeation Events')
-#         ax.set_xlabel('Simulation Time [ns]')
-#         ax.set_ylabel('N$_{events}$')
-#         ax.legend(loc='2')
-
-#         return ax
+        Parameters
+        ----------
+        path : str, optional
+            Path to save the output .csv file
+        filename : str, optional
+            Name of the output .csv file
+        """
+        import os
+        if path is None:
+            path = os.getcwd()
+        file = self.df.to_csv(f"{path}/{filename}.csv", header=["Frame", "Events"], index=False)
+        return file
 
 
 
-#     # def in_cylinder(self):
-#     #     out_atoms = self.u.select_atoms(self.out_sel)
-#     #     out_com = np.array([out_atoms.center_of_mass()[0], out_atoms.center_of_mass()[1]])
-#     #     print(out_com)
-
-#     # def count_by_time(self):
-#     #     """Counts the number of permeation events per timestep.
-        
-#     #     Returns
-#     #     -------
-#     #     events : numpy.ndarray
-#     #         Contains the total number of ion permeation events computed at each timestep.
-#     #         Can be used along with :attr:`IonPermeation.times` to plot
-#     #         the number of hydrogen bonds over time.
-#     #     """
-
-#     # def _conclude(self):
-#     #     self.results.events = np.asarray(self.results.events).T
 # ###############################################################################
 
-path = "/Users/afroditimariazaki/Documents/GITHUB/IonPermeation"
+# path = "/biggin/b134/bioc1550/Documents/WORK/GITHUB/IONPERMEATION"
+path = "/Users/afroditimariazaki/Documents/WORK/GITHUB/IONPERMEATION"
+# path = "/Users/afroditimariazaki/Documents/WORK/TPC2/CONDUCTANCE/WT/Truncated/NA/NoPHSFRetrsaints/V750/OpenSF/Repeat5"
+topfile = f"{path}/test.pdb"
+trjfile = f"{path}/test.xtc"
 
-u = mda.Universe(f"{path}/test.pdb", f"{path}/test.xtc")
-ion = u.select_atoms("resname SOD")
-in_sel = u.select_atoms("protein and resid 652 653 654 and name CA")
-out_sel = u.select_atoms("protein and resid 690 694 and name CA")
-# com = "protein and resid 690"
+u = mda.Universe(topfile, trjfile)
 
-# cylayer innerRadius externalRadius zMax zMin selection
-# cutoff = 5
-# zmin = -10
-# zmax= 10
+ions = "resname SOD"
+channel_com = "protein and resid 312 and name OH"
 
-# cyzone = u.select_atoms(f"cyzone {cutoff} {zmax} {zmin} (protein and resid 690 694 and name CA)")
-# print(cyzone.atoms)
+in_sel = "protein and resid 271 272 652 653 654 and name CA"
+out_sel = "protein and resid 690 694 308 312 and name CA"
 
-# for atom in cyzone:
-#     print(atom.index)
-# ip = IonPermeation(ion, in_sel, out_sel, -10, 10, com, 5, verbose=True).run()
-in_cylinder(u)
+IP = IonPermeation(u, ions, in_sel, out_sel)
+IP.run()
+IP.save()
+IP.plot()
