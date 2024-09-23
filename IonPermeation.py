@@ -6,10 +6,7 @@ Ion Permeation Analysis
 :Affiliation: SBCB, University Of Oxford
 :Year: 2023
 
-This module contains the :class:'IonPermeation' that analyses the ion permeation through an ion channel in a Universe. The functions in this module are:
-ion permeation (IP)
-ToDo:
-conductance (C) and passing time (PT).
+This module contains the :class:'IonPermeation' that analyses the ion permeation through an ion channel in a Universe.
 
 Input
 -----
@@ -65,6 +62,10 @@ IP.save()
 To plot data::
 
 IP.plot()
+
+To compute ion conductance::
+
+IP.conductance()
 
 
 Classes
