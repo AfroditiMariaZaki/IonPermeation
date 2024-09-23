@@ -50,7 +50,8 @@ IP = IonPermeation(
     universe=u, 
     atomgroup='resname SOD', 
     in_sel='protein and resid 271 272 652 653 654 and name CA', 
-    out_sel='protein and resid 308 312 690 694 and name CA')
+    out_sel='protein and resid 308 312 690 694 and name CA'
+    )
 
 
 To compute ion permeation events::
@@ -81,29 +82,11 @@ Functions
 
 
 import numpy as np
-
-import logging
-import warnings
-
 import MDAnalysis as mda
 import pandas as pd
 import matplotlib.pyplot as plt
 from MDAnalysis.analysis.base import AnalysisBase
-from MDAnalysis.analysis.base import Results
 
-
-
-# def in_channel_ions(atomgroup, channel_upper, channel_lower, channel_com, zmin=0, cutoff=5.0):
-#     """
-#     Selects all ions that are found in the ion conduction pore
-#     """
-
-#     upper_sel = u.select_atoms(channel_upper)
-#     lower_sel = u.select_atoms(channel_lower)
-#     zmax = upper_sel.center_of_geometry()[2]-lower_sel.center_of_geometry()[2]
-#     cyzone = u.select_atoms(f"{atomgroup} and cyzone {cutoff} {zmax} {zmin} {channel_com}")
-
-#     return cyzone
 
 def in_channel_ions(atomgroup, in_sel, out_sel, channel_com, zmin=0, cutoff=5.0):
     """
@@ -212,6 +195,33 @@ class IonPermeation(AnalysisBase):
         print(self._ts.frame, self.events)
 
 
+    def conductance(self, voltage=0.15, valence=1):
+        """
+        Ion channel conductance calculation
+
+        Formula
+        -------
+        gamma = 1 / R
+        gamma = I / V
+        gamma = N * valence * q / t * V
+
+        Parameters
+        ----------
+        
+        """
+        q = 1.6e-19
+        charge = valence*q
+        N = self.events
+        print(self._trajectory.totaltime)
+        time = self._trajectory.totaltime * 1e-12
+        current = (N*charge)/time
+        conductance = current/voltage
+        conductance_in_pS = round(conductance*1e+12, 2)
+        print("Ion channel conductance is", conductance_in_pS, "pS")
+
+        return conductance_in_pS
+
+
     def _conclude(self):
         """
         Finish up by transforming the
@@ -252,13 +262,10 @@ class IonPermeation(AnalysisBase):
 
 
 
-# ###############################################################################
+################################################################################
 
-# path = "/biggin/b134/bioc1550/Documents/WORK/GITHUB/IONPERMEATION"
-path = "/Users/afroditimariazaki/Documents/WORK/GITHUB/IONPERMEATION"
-# path = "/Users/afroditimariazaki/Documents/WORK/TPC2/CONDUCTANCE/WT/Truncated/NA/NoPHSFRetrsaints/V750/OpenSF/Repeat5"
-topfile = f"{path}/test.pdb"
-trjfile = f"{path}/test.xtc"
+topfile = "data/test.pdb"
+trjfile = "data/test.xtc"
 
 u = mda.Universe(topfile, trjfile)
 
@@ -272,3 +279,4 @@ IP = IonPermeation(u, ions, in_sel, out_sel)
 IP.run()
 IP.save()
 IP.plot()
+IP.conductance(voltage=0.75)
