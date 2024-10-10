@@ -33,7 +33,12 @@ How it works
         * The position of every ion across the membrane plane is read and if found to be within the cylinder defined by the pore axis and a cutoff radius
         and between the limits set by the residues that form the entry and exit points of the ion channel, it is stored in an AtomGroup (cyzone).
         * The position of every ion in the cyzone AtomGroup across the pore axis that was computed in the previous frame is read and if found to be lower than the exit point,
-        the ion is considered to have permeated through the ion channel and the events counter increases by +1.
+        the ion is considered to have permeated through the ion channel and the events counter (self.events) increases by +1.
+        * If the ion index number (self.ion_id) matches the ion index number that was saved at the previous frame, the permeation event is considered to have already been counted.
+          This happens because sometimes the ion will be engaged by the gate-forming residues, moving in and out of the exit point before completely passing through. 
+          Counting this event multiple times will overestimate the number of permeation events and therefore the ion conductance.
+        * The cyzone AtomGroup is updated to store the ions that are found in the ion channel.
+
 
         
 Example use of :class: 'IonPermeation'        
