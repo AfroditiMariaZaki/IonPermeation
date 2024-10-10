@@ -8,12 +8,12 @@ It has the following functionalities:
 * Plots cumulative number of permeation events as a function of simulation time.
 * Computes the ion conductance of the channel.
 
-# ToDo :  
+## ToDo :  
 * Calculates and plots the z-position of the ions and the water molecules that pass through the ion channel as a function of time.
 * Calculates the average binding time of each passing ion to the channel constriction points.
 
 
-# How to use
+## How to use
 
 ```
 u = mda.Universe("test.pdb", "test.xtc")
@@ -29,7 +29,7 @@ IP.plot()
 IP.conductance()
 ```
 
-# Dependencies
+## Dependencies
 
 * MDAnalysis
 * NumPy
