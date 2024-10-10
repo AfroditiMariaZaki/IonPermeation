@@ -13,7 +13,7 @@ It has the following functionalities:
 * Calculates the average binding time of each passing ion to the channel constriction points.
 
 
-# Usage
+# How to use
 
 ```
 u = mda.Universe("test.pdb", "test.xtc")
@@ -28,3 +28,11 @@ IP.save()
 IP.plot()
 IP.conductance()
 ```
+
+# Dependencies
+
+* MDAnalysis
+* NumPy
+* Pandas
+* Matplotlib
+
