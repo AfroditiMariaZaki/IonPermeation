@@ -1,9 +1,8 @@
 import pytest
 import MDAnalysis as mda
-import IonPermeation.ion_permeation
+from ..ion_permeation import IonPermeation
 
-
-@pytest.fixture()
+@pytest.fixture(scope='module')
 def setup_universe():
     """
     Create a sample Universe with a test PDB and trajectory file
@@ -14,7 +13,8 @@ def setup_universe():
 
     return u
 
-def initialization(setup_universe):
+@pytest.fixture(scope='module')
+def initialization(setup_universe: mda.Universe):
     """
     Initialize the IonPermeation module
     """
@@ -30,3 +30,4 @@ def initialization(setup_universe):
     assert IP.atomgroup == ions
     assert IP.in_sel is not None
     assert IP.out_sel is not None
+
